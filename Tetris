@@ -1,0 +1,257 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart'; 
+import 'dart:async';
+import 'dart:math';
+
+void main() => runApp(TetrisApp());
+
+class TetrisApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Tetris',
+      home: TetrisGame(),
+    );
+  }
+}
+
+class TetrisGame extends StatefulWidget {
+  @override
+  _TetrisGameState createState() => _TetrisGameState();
+}
+
+class _TetrisGameState extends State<TetrisGame> {
+  static const int width = 10; 
+  static const int height = 20; 
+  late List<List<int>> board; 
+  late Timer timer; 
+  List<List<int>>? currentPiece; 
+  int piecePositionY = 0; 
+  int piecePositionX = 4; 
+
+  _TetrisGameState()
+      : board = List.generate(height, (_) => List.generate(width, (_) => 0));
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+  @override
+  void dispose() {
+    timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return RawKeyboardListener(
+      focusNode: FocusNode(),
+      onKey: (RawKeyEvent event) {
+        if (event is RawKeyDownEvent) {
+          if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+            _moveRight();
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+            _moveLeft();
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+            _moveDown();
+          } else if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+            _rotate();
+          }
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text('Tetris'),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                width: 200,
+                height: 400,
+                padding: EdgeInsets.only(bottom: 20),
+                child: CustomPaint(
+                  painter: TetrisPainter(board, currentPiece, piecePositionX, piecePositionY, width, height),
+                ),
+              ),
+              ElevatedButton(
+                onPressed: _startGame,
+                child: Text('Start Game'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _startGame() {
+    board = List.generate(height, (_) => List.generate(width, (_) => 0));
+    _generateNewPiece(); 
+
+    timer = Timer.periodic(Duration(milliseconds: 500), (timer) {
+      _moveDown();
+    });
+
+    setState(() {}); 
+  }
+
+  void _generateNewPiece() {
+    final pieces = [
+      [[1], [1], [1], [1]],
+      [[1, 1], [1, 1]],
+      [[0, 1, 0], [1, 1, 1]],
+      [[1, 0, 0], [1, 1, 1]],
+      [[0, 0, 1], [1, 1, 1]],
+      [[0, 1, 1], [1, 1, 0]],
+      [[1, 1, 0], [0, 1, 1]],
+    ];
+
+    Random random = Random();
+    currentPiece = pieces[random.nextInt(pieces.length)];
+    piecePositionY = 0; 
+    piecePositionX = (width ~/ 2) - (currentPiece![0].length ~/ 2); 
+  }
+
+  void _moveDown() {
+    if (_canMove(piecePositionX, piecePositionY + 1)) {
+      piecePositionY++;
+    } else {
+      _fixPiece();
+      _removeFullLines(); 
+      _generateNewPiece();
+    }
+    setState(() {}); 
+  }
+
+  bool _canMove(int x, int y) {
+    for (int row = 0; row < currentPiece!.length; row++) {
+      for (int col = 0; col < currentPiece![row].length; col++) {
+        if (currentPiece![row][col] != 0) {
+          if (y + row >= height || x + col < 0 || x + col >= width || board[y + row][x + col] != 0) {
+            return false;
+          }
+        }
+      }
+    }
+    return true;
+  }
+
+  void _fixPiece() {
+    for (int row = 0; row < currentPiece!.length; row++) {
+      for (int col = 0; col < currentPiece![row].length; col++) {
+        if (currentPiece![row][col] != 0) {
+          board[piecePositionY + row][piecePositionX + col] = 1;
+        }
+      }
+    }
+  }
+
+  void _removeFullLines() {
+    for (int y = height - 1; y >= 0; y--) {
+      bool isFull = true;
+      for (int x = 0; x < width; x++) {
+        if (board[y][x] == 0) {
+          isFull = false;
+          break;
+        }
+      }
+      if (isFull) {
+        board.removeAt(y);
+        board.insert(0, List.generate(width, (_) => 0)); 
+        y++; 
+      }
+    }
+  }
+
+  void _moveRight() {
+    if (_canMove(piecePositionX + 1, piecePositionY)) {
+      piecePositionX++;
+      setState(() {});
+    }
+  }
+
+  void _moveLeft() {
+    if (_canMove(piecePositionX - 1, piecePositionY)) {
+      piecePositionX--;
+      setState(() {});
+    }
+  }
+
+  void _rotate() {
+    List<List<int>> rotatedPiece = List.generate(currentPiece![0].length,
+        (i) => List.generate(currentPiece!.length, (j) => currentPiece![currentPiece!.length - 1 - j][i]));
+
+    if (_canMove(piecePositionX, piecePositionY)) {
+      currentPiece = rotatedPiece;
+      setState(() {});
+    }
+  }
+}
+
+class TetrisPainter extends CustomPainter {
+  final List<List<int>> board;
+  final List<List<int>>? currentPiece;
+  final int piecePositionX;
+  final int piecePositionY;
+  final int width;
+  final int height;
+
+  TetrisPainter(this.board, this.currentPiece, this.piecePositionX, this.piecePositionY, this.width, this.height);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    double tileWidth = size.width / width;
+    double tileHeight = size.height / height;
+
+    var gridPaint = Paint()
+      ..color = Colors.grey.withOpacity(0.5)
+      ..style = PaintingStyle.stroke;
+
+    for (int x = 0; x <= width; x++) {
+      canvas.drawLine(Offset(x * tileWidth, 0), Offset(x * tileWidth, size.height), gridPaint);
+    }
+
+    for (int y = 0; y <= height; y++) {
+      canvas.drawLine(Offset(0, y * tileHeight), Offset(size.width, y * tileHeight), gridPaint);
+    }
+
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (board[y][x] == 1) {
+          var paint = Paint()..color = Colors.blue;
+          canvas.drawRect(
+            Rect.fromLTRB(x * tileWidth, y * tileHeight, (x + 1) * tileWidth, (y + 1) * tileHeight),
+            paint,
+          );
+        }
+      }
+    }
+
+    if (currentPiece != null) {
+      for (int row = 0; row < currentPiece!.length; row++) {
+        for (int col = 0; col < currentPiece![row].length; col++) {
+          if (currentPiece![row][col] != 0) {
+            var paint = Paint()..color = Colors.red; 
+            canvas.drawRect(
+              Rect.fromLTRB(
+                (piecePositionX + col) * tileWidth,
+                (piecePositionY + row) * tileHeight,
+                (piecePositionX + col + 1) * tileWidth,
+                (piecePositionY + row + 1) * tileHeight,
+              ),
+              paint,
+            );
+          }
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(CustomPainter oldDelegate) {
+    return true;
+  }
+}
